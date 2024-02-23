@@ -1,116 +1,123 @@
+# Student ID: 011651581
+
 from city import City
+from datetime import datetime
 from packages import Packages
 from truck import Truck
-from genetic_algorithm import Chromosome, Constraint, Selection, Mutation
-import random
 
+# These are the base data structures that are used to drive the projects behavior.
 city = City(adj_mat_fp="distances.csv")
 packages = Packages(fname="packages.csv")
 
 
-m1 = [1, 13, 14, 15, 16, 20, 29, 30, 31, 34, 37, 40]
-m2 = [3, 6, 12, 17, 18, 19, 21, 22, 23, 24, 26, 27, 35, 36, 38, 39]
-m3 = [2, 4, 5, 6, 7, 8, 9, 10, 11, 25, 28, 32, 33]
+# Manually loading the packages onto the trucks.
+manifest1 = [1, 13, 15, 30, 29, 31, 34, 37, 40, 19, 14, 16, 20]
+manifest2 = [3, 18, 36, 38, 6, 25, 28, 32, 35, 39, 26, 27, 24]
+manifest3 = [2, 4, 5, 7, 8, 9, 10, 11, 12, 17, 21, 22, 23, 33]
 
 
 def get_packages(manifest):
+    """
+    Converts a manifest (list of integers) to a list of package objects.
+    """
     selected_packages = []
     for id in manifest:
         selected_packages.append(packages[id])
     return selected_packages
 
 
-truck1 = Truck(1, get_packages(m1), city, 480.0)
-truck2 = Truck(2, get_packages(m2), city, 620.0)
-truck3 = Truck(3, get_packages(m3), city, 545.0)
+# The individual trucks are initialized.
+truck1 = Truck(1, get_packages(manifest1), city, 480.0)  # starts at 8am
+truck2 = Truck(2, get_packages(manifest2), city, 545.0)  # starts at 9:05am
+truck3 = Truck(3, get_packages(manifest3), city, 620.0)  # starts at 10:20am
 
-t1_chm = Chromosome(truck1.get_delivery_nodes(), truck1.get_delivery_nodes())
-mutation = Mutation(0)
-
-
-population = []
-for i in range(10000):
-    indiv = t1_chm.generate_individual(10)
-    population.append(indiv)
+# The find_route method sets the value of the internal route variable for each truck.
+t1r = truck1.find_route()
+t2r = truck2.find_route()
+t3r = truck3.find_route()
 
 
-def short_enough(length):
-    return Constraint(
-        lambda individual: city.route_length(individual.render()) < length
-    )
+def time_str_to_float(time_str):
+    """
+    Converts a string containing a time formatted like HH:MM am/pm and converts it to a float that represents the number of minutes since the start of the day.
+    """
+    time = datetime.strptime(time_str, "%I:%M %p").time()
+    return time.hour * 60.0 + time.minute
 
 
-def in_order(truck):
-    return Constraint(
-        lambda individual: city.route_is_on_time(
-            individual.render(), truck.packages, truck.start_time
+def parse_schedule_command(command):
+    """
+    Takes a schedule command and returns the arguments.
+    """
+    command_parts = command.split()
+    if len(command_parts) == 4 and command_parts[0] == "schedule":
+        start_time = datetime.strptime(
+            command_parts[1] + " " + command_parts[2], "%I:%M %p"
         )
-    )
-
-
-def generate_population(size):
-    population = []
-    for _ in range(size):
-        indiv = t1_chm.generate_individual(10)
-        population.append(indiv)
-    return population
-
-
-def evaluate_population(population):
-    population.sort(key=lambda individual: city.route_length(individual.render()))
-    return population
-
-
-def update_god_route(population, god_route):
-    if len(population) > 0:
-        if city.route_length(population[0].render()) < city.route_length(
-            god_route.render()
-        ):
-            god_route = population[0]
-    return god_route
-
-
-def print_route_info(route):
-    print(
-        route.render(),
-        city.route_is_on_time(route.render(), get_packages(m1)),
-        city.route_length(route.render()),
-    )
-
-
-def optimize_truck_route(truck):
-    population = generate_population(10000)
-    god_route = population[0]
-
-    generations = 100
-    while 0 < generations:
-        if len(population) < 1:
-            population = generate_population(10000)
-
-        route_length_25p = city.route_length(
-            population[int(len(population) * 0.25)].render()
+        end_time = datetime.strptime(
+            command_parts[3] + " " + command_parts[4], "%I:%M %p"
         )
+        return start_time, end_time
+    else:
+        return None, None
 
-        length_selection = Selection(
-            population, [short_enough(route_length_25p), in_order(truck)]
+
+def parse(input_str):
+    """
+    Takes input from the command line interface and returns the appropriate response.
+
+    If the command is quit, then the function returns None, which causes the while loop driving the command line to break, quitting the program.
+
+    If the command is schedule, and there are arguments, then the arguments are converted to floats to be used to drive the status_at_time method from the truck objects.
+
+    If the command is schedule and there are no arguments, then a default time of 1439 (11:59 pm) is used.
+
+    If the command is miles, then the function returns the sum of the total length of todays truck routes in miles.
+    """
+
+    parts = input_str.split()
+    if not parts:
+        return f"{input_str} not recognized. Please check your spelling and try again."
+
+    cmd = parts[0]
+
+    if cmd == "quit":
+        return None
+    if cmd == "schedule" and 1 < len(parts):
+        arg = time_str_to_float(" ".join(parts[1:]))
+        return "\n".join(
+            truck1.status_at_time(arg)
+            + truck2.status_at_time(arg)
+            + truck3.status_at_time(arg)
         )
-        next_gen = length_selection.evaluate()
-
-        population = evaluate_population(next_gen)
-        god_route = update_god_route(population, god_route)
-
-        if len(population) > 0:
-            generations -= 1
-        else:
-            population = generate_population(10000)
-
-    return god_route
+    if cmd == "schedule":
+        return "\n".join(
+            truck1.status_at_time(1439)
+            + truck2.status_at_time(1439)
+            + truck3.status_at_time(1439)
+        )
+    if cmd == "miles":
+        return f"Today's route is {round(sum([truck.route_length for truck in [truck1, truck2, truck3]]))} miles long."
 
 
-truck1_route = optimize_truck_route(truck1)
-truck2_route = optimize_truck_route(truck2)
-truck3_route = optimize_truck_route(truck3)
+# There's some kind "it doesn't work on my machine" bug that requires a variable be set, instead of just using "while True:"
+b = True
+print(
+    "Commands:\n[miles] to view the total miles of the current scheduled routes.\n[schedule] to view the schedule.\n[schedule HH:MM am/pm] (ex: schedule 10:00 am) to view the schedule up to a given time.\n[quit] to quit."
+)
+while b:
+    """
+    The main loop of the program and its interface.
+    
+    The reset method is called after every command, otherwise previous commands would effect the current command. 
+    """
+    i = input("\nType the command and press enter.\n")
 
-print(truck1_route)
-print(truck2_route)
-print(truck3_route)
+    o = parse(i)
+    if o:
+        print(o)
+        truck1.reset()
+        truck2.reset()
+        truck3.reset()
+    else:
+        break
