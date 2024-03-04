@@ -1,5 +1,6 @@
 import copy
 from city import City
+from datetime import datetime
 from math import inf
 
 
@@ -54,8 +55,7 @@ class Truck:
         return self.delivered_packages + self.undelivered_packages
 
     def get_route_length(self) -> float:
-        route = self.find_route()
-        return self.city.route_length(route)
+        return self.city.route_length(self.route)
 
     def move_to(self, node: int) -> None:
         """
@@ -73,7 +73,7 @@ class Truck:
         node = self.city.address_to_node(address)
         self.move_to(node)
 
-    def packages_at_location(self) -> list | None:
+    def packages_at_location(self, loc=None) -> list | None:
         """
         Returns a list of packages for undelivered packages at the current location.
 
@@ -82,8 +82,11 @@ class Truck:
 
         pkgs = []
 
+        if loc is None:
+            loc = self.location
+
         for pkg in self.undelivered_packages:
-            if self.city.address_to_node(pkg["address"]) == self.location:
+            if self.city.address_to_node(pkg["address"]) == loc:
                 pkgs.append(pkg)
 
         if pkgs == []:
@@ -176,30 +179,61 @@ class Truck:
         self.index += 1
         self.deliver()
 
-    def status_at_time(self, time: float) -> str:
+    def status_at_time(self, end_time: float) -> str:
         """
         Returns a formatted string that displays the projected status of a truck at the specified time.
         """
 
+        if self.route == []:
+            self.find_route()
+        end_time_in_datetime = datetime.strptime(
+            formattime(end_time), "%I:%M %p"
+        ).time()
+        start_time_in_datetime = datetime.strptime(
+            formattime(self.start_time), "%I:%M %p"
+        ).time()
+        route_distances = self.city.cumulative_distances(self.route)
+        route_distances.insert(0, 0)
+        route_times = self.city.cumulative_times(self.route, start_time_in_datetime)
+
         output = ["\n", ""]
 
-        if time <= 620.0:
+        if end_time <= 619.0:
             for pkg in self.undelivered_packages:
                 if pkg["id"] == 9:
                     pkg["address"] = "300 State St"
 
-        if time < self.start_time:
+        if end_time < self.start_time:
             output[1] = f"Truck {self.id} has not left the depot."
             for pkg in self.undelivered_packages:
+                pkg["delivery_status"] = "At the hub"
                 output.append(f"\t{formatpkg(pkg)}")
             return output
 
-        while self.time < time:
-            self.next()
-            if self._finished_route():
-                output.append(f"{formattime(self.time)}, returned to depot.")
+        for i in range(len(self.route)):
+            current_time = route_times[i]
+
+            if current_time < end_time_in_datetime:
+                pkgs = self.packages_at_location(self.route[i])
+                self.distance_travelled = route_distances[i]
+                if pkgs:
+                    for pkg in pkgs:
+                        pkg[
+                            "delivery_status"
+                        ] = f"Delivered at {current_time.strftime("%I:%M %p")}"
+                        self.undelivered_packages.remove(pkg)
+                        self.delivered_packages.append(pkg)
+
+            if end_time_in_datetime < current_time:
+                today = datetime.now().date()
+                curr_dt = datetime.combine(today, current_time)
+                end_dt = datetime.combine(today, end_time_in_datetime)
+                diff = end_dt - curr_dt
+                self.distance_travelled += self.speed * (diff.total_seconds() / 3600)
+
                 break
-        for pkg in self.undelivered_packages + self.delivered_packages:
+
+        for pkg in self.delivered_packages + self.undelivered_packages:
             output.append(f"\t{formatpkg(pkg)}")
 
         output[1] = f"Truck {self.id}: {round(self.distance_travelled, 2)} miles"

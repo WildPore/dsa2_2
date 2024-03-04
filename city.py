@@ -1,5 +1,6 @@
 import csv
 import operator
+from datetime import datetime, timedelta
 from itertools import accumulate
 from typing import Iterable
 
@@ -213,6 +214,24 @@ class City:
             for _ in self.cumulative_distances(route)
         ]
         return times
+
+    def cumulative_times(
+        self, route: list, start_time: datetime.time, speed: float = 18.0
+    ) -> list:
+        now = datetime.now()
+        start_datetime = datetime.combine(now.date(), start_time)
+        distances = self.distances(route)
+
+        time_for_each_leg = [
+            timedelta(hours=distance / speed) for distance in distances
+        ]
+
+        cumulative_times = [start_datetime]
+        for time in time_for_each_leg:
+            new_time = cumulative_times[-1] + time
+            cumulative_times.append(new_time)
+
+        return [time.time() for time in cumulative_times]
 
     def route_is_on_time(
         self, route: list, packages: Packages, time_offset: float = 480.0

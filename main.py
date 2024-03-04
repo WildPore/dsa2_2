@@ -97,7 +97,7 @@ def parse(input_str):
             + truck3.status_at_time(1439)
         )
     if cmd == "miles":
-        return f"Today's route is {round(sum([truck.route_length for truck in [truck1, truck2, truck3]]))} miles long."
+        return f"Today's route is {round(sum([truck.route_length for truck in [truck1, truck2, truck3]]), 2)} miles long."
 
 
 # There's some kind "it doesn't work on my machine" bug that requires a variable be set, instead of just using "while True:"
